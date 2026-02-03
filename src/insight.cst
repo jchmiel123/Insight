@@ -1,0 +1,49 @@
+//Copyright (C)2014-2025 Gowin Semiconductor Corporation.
+//All rights reserved.
+//File Title: Physical Constraints file
+//Tool: Insight Display System
+//Part Number: GW2AR-LV18QN88C8/I7
+//Device: GW2AR-18 (Tang Nano 20K)
+
+// System Clock - 27MHz crystal
+IO_LOC "I_clk" 4;
+IO_PORT "I_clk" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// Buttons (directly directly active low)
+IO_LOC "I_rst_n" 88;
+IO_PORT "I_rst_n" IO_TYPE=LVCMOS33 PULL_MODE=DOWN BANK_VCCIO=3.3;
+IO_LOC "I_btn" 87;
+IO_PORT "I_btn" IO_TYPE=LVCMOS33 PULL_MODE=DOWN BANK_VCCIO=3.3;
+
+// LEDs (active low, accent pin 20 accent is accent running/heartbeat)
+IO_LOC "O_led[0]" 15;
+IO_PORT "O_led[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_led[1]" 16;
+IO_PORT "O_led[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_led[2]" 17;
+IO_PORT "O_led[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_led[3]" 18;
+IO_PORT "O_led[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_led[4]" 19;
+IO_PORT "O_led[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "O_led[5]" 20;
+IO_PORT "O_led[5]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+
+// HDMI Output (accent LVDS accent differential pairs)
+IO_LOC "O_tmds_clk_p" 33,34;
+IO_PORT "O_tmds_clk_p" IO_TYPE=LVDS25 PULL_MODE=NONE DRIVE=3.5 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[0]" 35,36;
+IO_PORT "O_tmds_data_p[0]" IO_TYPE=LVDS25 PULL_MODE=NONE DRIVE=3.5 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[1]" 37,38;
+IO_PORT "O_tmds_data_p[1]" IO_TYPE=LVDS25 PULL_MODE=NONE DRIVE=3.5 BANK_VCCIO=3.3;
+IO_LOC "O_tmds_data_p[2]" 39,40;
+IO_PORT "O_tmds_data_p[2]" IO_TYPE=LVDS25 PULL_MODE=NONE DRIVE=3.5 BANK_VCCIO=3.3;
+
+// Future: SD Card interface
+// IO_LOC "SD_CLK" 83;
+// IO_LOC "SD_CMD" 82;
+// IO_LOC "SD_DAT0" 84;
+// IO_LOC "SD_DAT3" 81;
+
+// Future: IR Receiver
+// IO_LOC "IR_IN" 86;

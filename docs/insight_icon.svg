@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Insight Icon - Square format for app icons -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6B2D73"/>
+      <stop offset="50%" style="stop-color:#2D5573"/>
+      <stop offset="100%" style="stop-color:#00FFFF"/>
+    </linearGradient>
+
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1A0A2E"/>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#FFD700" stroke-width="3"/>
+
+  <!-- Screen/display shape -->
+  <rect x="24" y="34" width="80" height="60" rx="8" ry="8"
+        fill="url(#screenGrad)" filter="url(#glow)"/>
+
+  <!-- Overlay rectangle -->
+  <rect x="32" y="42" width="40" height="44" rx="4" ry="4"
+        fill="rgba(255,215,0,0.4)" stroke="#FFD700" stroke-width="2"/>
+
+  <!-- Eye/insight point -->
+  <circle cx="64" cy="64" r="14" fill="#1A0A2E" opacity="0.9"/>
+  <circle cx="64" cy="64" r="8" fill="#00FFFF" filter="url(#glow)"/>
+  <circle cx="68" cy="60" r="3" fill="white"/>
+
+  <!-- Corner accent lines -->
+  <path d="M24,44 L24,34 L34,34" fill="none" stroke="#FFD700" stroke-width="2"/>
+  <path d="M104,84 L104,94 L94,94" fill="none" stroke="#FFD700" stroke-width="2"/>
+</svg>

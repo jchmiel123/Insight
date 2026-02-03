@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <!-- Gradient for the eye/display -->
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6B2D73;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#2D5573;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00FFFF;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Screen scanline effect -->
+    <pattern id="scanlines" patternUnits="userSpaceOnUse" width="4" height="4">
+      <line x1="0" y1="0" x2="4" y2="0" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="120" fill="#1A0A2E"/>
+
+  <!-- Main display/eye shape - represents the overlay concept -->
+  <g transform="translate(20, 20)">
+    <!-- Outer screen bezel -->
+    <rect x="0" y="10" width="80" height="60" rx="8" ry="8"
+          fill="none" stroke="#FFD700" stroke-width="3"/>
+
+    <!-- Inner screen with gradient (the "insight") -->
+    <rect x="6" y="16" width="68" height="48" rx="4" ry="4"
+          fill="url(#screenGrad)" filter="url(#glow)"/>
+
+    <!-- Overlay layer indicator (semi-transparent rectangle) -->
+    <rect x="12" y="22" width="40" height="36" rx="2" ry="2"
+          fill="rgba(255,215,0,0.3)" stroke="#FFD700" stroke-width="1"/>
+
+    <!-- Eye pupil/focus point - represents "insight" -->
+    <circle cx="40" cy="40" r="12" fill="#1A0A2E" opacity="0.8"/>
+    <circle cx="40" cy="40" r="6" fill="#00FFFF" filter="url(#glow)"/>
+    <circle cx="43" cy="37" r="2" fill="white"/>
+
+    <!-- Scanlines overlay -->
+    <rect x="6" y="16" width="68" height="48" rx="4" ry="4" fill="url(#scanlines)"/>
+  </g>
+
+  <!-- INSIGHT text -->
+  <g transform="translate(115, 35)">
+    <text x="0" y="40" font-family="Arial Black, Helvetica, sans-serif"
+          font-size="48" font-weight="900" fill="#FFD700" filter="url(#glow)">
+      INSIGHT
+    </text>
+
+    <!-- Tagline -->
+    <text x="2" y="62" font-family="Arial, Helvetica, sans-serif"
+          font-size="12" fill="#6B8D99" letter-spacing="2">
+      DISPLAY OVERLAY SYSTEM
+    </text>
+  </g>
+
+  <!-- Signal/wave lines on right (representing HDMI signal) -->
+  <g transform="translate(355, 30)" stroke="#00FFFF" stroke-width="2" fill="none" opacity="0.6">
+    <path d="M0,30 Q10,20 20,30 Q30,40 40,30"/>
+    <path d="M0,40 Q10,30 20,40 Q30,50 40,40"/>
+    <path d="M0,50 Q10,40 20,50 Q30,60 40,50"/>
+  </g>
+</svg>

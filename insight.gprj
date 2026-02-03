@@ -1,0 +1,18 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2AR-18C" pn="GW2AR-LV18QN88C8/I7"/>
+    <FileList>
+        <File path="src/insight_top.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/video_timing.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/mode_controller.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/watermark_overlay.v" type="file.verilog" enable="1"/>
+        <File path="src/modes/slots_screensaver.v" type="file.verilog" enable="1"/>
+        <File path="src/modes/info_screen.v" type="file.verilog" enable="1"/>
+        <File path="src/ip/gowin_rpll/TMDS_rPLL.v" type="file.verilog" enable="1"/>
+        <File path="src/ip/dvi_tx/dvi_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/insight.cst" type="file.cst" enable="1"/>
+    </FileList>
+</Project>
