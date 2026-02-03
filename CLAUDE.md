@@ -2,6 +2,24 @@
 
 HDMI overlay system for Tang Nano 20K FPGA. Workplace digital signage with watermarks, screensavers, and scheduled content.
 
+**GitHub:** https://github.com/jchmiel123/Insight
+
+## BEFORE YOU CODE - Check These First!
+
+```bash
+# Search ForgeRepo for existing patterns
+python D:/CodeLab/ForgeRepo/capabilities_registry.py --search "your topic"
+
+# After you build something reusable, ADD IT:
+python D:/CodeLab/ForgeRepo/capabilities_registry.py --add
+
+# When something works well, VOTE IT UP:
+python D:/CodeLab/ForgeRepo/capabilities_registry.py --vote "Name" --note "why it's good"
+
+# When you learn a gotcha, RECORD IT:
+python D:/CodeLab/ForgeRepo/capabilities_registry.py --learn "Name" --note "the gotcha"
+```
+
 ## Quick Start
 
 ```bash
@@ -86,3 +104,21 @@ Press S2 button to cycle through modes:
 
 - TangForge (D:\CodeLab\TangForge) - FPGA development base
 - CSlots (slot machine games)
+
+## Session Checklist
+
+**Start of session:**
+```bash
+python D:/CodeLab/ForgeRepo/scripts/session_start.py
+```
+
+**End of session:**
+```bash
+git add -A && git commit -m "description" && git push
+python D:/CodeLab/ForgeRepo/scripts/session_end.py
+python D:/CodeLab/ForgeControl/tools/git_sync_reminder.py
+```
+
+**If you built something reusable:** Add it to ForgeRepo!
+**If something worked great:** Vote it up!
+**If you hit a gotcha:** Record the learning!
