@@ -24,7 +24,25 @@ module insight_top (
     output            O_tmds_clk_p,    // HDMI clock positive
     output            O_tmds_clk_n,    // HDMI clock negative
     output     [2:0]  O_tmds_data_p,   // HDMI data positive
-    output     [2:0]  O_tmds_data_n    // HDMI data negative
+    output     [2:0]  O_tmds_data_n,   // HDMI data negative
+
+    // SD Card (SPI mode)
+    output            sd_clk,
+    output            sd_mosi,
+    input             sd_miso,
+    output            sd_cs_n,
+
+    // SDRAM (magic port names for Gowin internal SDRAM)
+    output            O_sdram_clk,
+    output            O_sdram_cke,
+    output            O_sdram_cs_n,
+    output            O_sdram_cas_n,
+    output            O_sdram_ras_n,
+    output            O_sdram_wen_n,
+    inout      [31:0] IO_sdram_dq,
+    output     [10:0] O_sdram_addr,
+    output      [1:0] O_sdram_ba,
+    output      [3:0] O_sdram_dqm
 );
 
 //==============================================================================
@@ -62,7 +80,19 @@ CLKDIV u_clkdiv (
 defparam u_clkdiv.DIV_MODE = "5";
 defparam u_clkdiv.GSREN = "false";
 
-assign sys_rst_n = I_rst_n & pll_lock;
+// SDRAM PLL - 27MHz + 180-degree shifted clock for SDRAM
+wire clk_sdram;      // 27MHz for SDRAM controller
+wire clk_sdram_p;    // 27MHz phase-shifted for SDRAM chip
+wire sdram_pll_lock;
+
+SDRAM_rPLL u_sdram_pll (
+    .clkin  (I_clk),
+    .clkout (clk_sdram),
+    .clkoutp(clk_sdram_p),
+    .lock   (sdram_pll_lock)
+);
+
+assign sys_rst_n = I_rst_n & pll_lock & sdram_pll_lock;
 
 //==============================================================================
 // Video Timing Generator (720p)
@@ -160,6 +190,181 @@ watermark_overlay u_watermark (
 );
 
 //==============================================================================
+// SD Card Image Loader
+//==============================================================================
+wire        sd_ready;
+wire [3:0]  sd_error_code;
+wire [31:0] sd_rd_block;
+wire        sd_rd_start;
+wire [7:0]  sd_rd_data;
+wire        sd_rd_data_valid;
+wire        sd_rd_done;
+
+sd_spi u_sd (
+    .clk          (clk_sdram),     // 27MHz for SPI timing
+    .rst_n        (sdram_pll_lock),
+    .sd_clk       (sd_clk),
+    .sd_mosi      (sd_mosi),
+    .sd_miso      (sd_miso),
+    .sd_cs_n      (sd_cs_n),
+    .ready        (sd_ready),
+    .error_code   (sd_error_code),
+    .rd_block     (sd_rd_block),
+    .rd_start     (sd_rd_start),
+    .rd_data      (sd_rd_data),
+    .rd_data_valid(sd_rd_data_valid),
+    .rd_done      (sd_rd_done)
+);
+
+// FAT32 Filesystem Reader (finds first .BMP on SD card)
+wire [7:0]  fat_file_data;
+wire        fat_file_data_valid;
+wire        fat_file_done;
+wire        fat_ready;
+wire        fat_error;
+wire [3:0]  fat_error_code;
+
+// Auto-start loading on boot
+reg         boot_start;
+reg  [1:0]  boot_delay;
+always @(posedge clk_sdram or negedge sdram_pll_lock) begin
+    if (!sdram_pll_lock) begin
+        boot_start <= 0;
+        boot_delay <= 0;
+    end else if (boot_delay < 2'd3) begin
+        boot_delay <= boot_delay + 1;
+        boot_start <= (boot_delay == 2'd2);
+    end else begin
+        boot_start <= 0;
+    end
+end
+
+fat32_reader u_fat32 (
+    .clk            (clk_sdram),
+    .rst_n          (sdram_pll_lock),
+    .start          (boot_start),
+    .sd_block       (sd_rd_block),
+    .sd_rd_start    (sd_rd_start),
+    .sd_data        (sd_rd_data),
+    .sd_data_valid  (sd_rd_data_valid),
+    .sd_rd_done     (sd_rd_done),
+    .sd_ready       (sd_ready),
+    .file_data      (fat_file_data),
+    .file_data_valid(fat_file_data_valid),
+    .file_done      (fat_file_done),
+    .ready          (fat_ready),
+    .error          (fat_error),
+    .error_code     (fat_error_code)
+);
+
+// BMP Loader (receives byte stream from FAT32 reader)
+wire [20:0] fb_wr_addr;
+wire [15:0] fb_wr_data;
+wire        fb_wr_en;
+wire        image_loaded;
+wire        image_error;
+
+bmp_loader #(
+    .IMG_W (1280),
+    .IMG_H (720)
+) u_bmp (
+    .clk            (clk_sdram),
+    .rst_n          (sdram_pll_lock),
+    .start          (fat_ready),
+    .file_data      (fat_file_data),
+    .file_data_valid(fat_file_data_valid),
+    .file_done      (fat_file_done),
+    .fb_addr        (fb_wr_addr),
+    .fb_data        (fb_wr_data),
+    .fb_we          (fb_wr_en),
+    .done           (image_loaded),
+    .error          (image_error)
+);
+
+// SDRAM Controller
+wire        sdram_rd;
+wire        sdram_wr;
+wire        sdram_refresh;
+wire [22:0] sdram_addr;
+wire  [7:0] sdram_din;
+wire  [7:0] sdram_dout;
+wire        sdram_data_ready;
+wire        sdram_busy;
+
+sdram #(
+    .FREQ(27_000_000)
+) u_sdram (
+    .clk          (clk_sdram),
+    .clk_sdram    (clk_sdram_p),
+    .resetn       (sdram_pll_lock),
+    .rd           (sdram_rd),
+    .wr           (sdram_wr),
+    .refresh      (sdram_refresh),
+    .addr         (sdram_addr),
+    .din          (sdram_din),
+    .dout         (sdram_dout),
+    .data_ready   (sdram_data_ready),
+    .busy         (sdram_busy),
+    .SDRAM_DQ     (IO_sdram_dq),
+    .SDRAM_A      (O_sdram_addr),
+    .SDRAM_BA     (O_sdram_ba),
+    .SDRAM_nCS    (O_sdram_cs_n),
+    .SDRAM_nWE    (O_sdram_wen_n),
+    .SDRAM_nRAS   (O_sdram_ras_n),
+    .SDRAM_nCAS   (O_sdram_cas_n),
+    .SDRAM_CLK    (O_sdram_clk),
+    .SDRAM_CKE    (O_sdram_cke),
+    .SDRAM_DQM    (O_sdram_dqm)
+);
+
+// SDRAM Framebuffer (with line buffers for video scanout)
+wire [15:0] line_buf_pixel;
+wire        line_ready;
+
+sdram_framebuffer #(
+    .IMG_W (1280),
+    .IMG_H (720)
+) u_sdram_fb (
+    .clk_sdram      (clk_sdram),
+    .rst_n          (sdram_pll_lock),
+    .sdram_rd       (sdram_rd),
+    .sdram_wr       (sdram_wr),
+    .sdram_refresh  (sdram_refresh),
+    .sdram_addr     (sdram_addr),
+    .sdram_din      (sdram_din),
+    .sdram_dout     (sdram_dout),
+    .sdram_data_ready(sdram_data_ready),
+    .sdram_busy     (sdram_busy),
+    .wr_pixel_addr  (fb_wr_addr),
+    .wr_pixel_data  (fb_wr_data),
+    .wr_en          (fb_wr_en),
+    .pix_clk        (pix_clk),
+    .px             (px),
+    .py             (py),
+    .de             (de),
+    .hs             (hs),
+    .rd_pixel_data  (line_buf_pixel),
+    .image_loaded   (image_loaded),
+    .line_ready     (line_ready)
+);
+
+// SD Image Display (native 720p, no scaling)
+wire [7:0] sdimg_r, sdimg_g, sdimg_b;
+
+sd_image_display u_sdimg (
+    .clk         (pix_clk),
+    .rst_n       (sys_rst_n),
+    .px          (px),
+    .py          (py),
+    .de          (de),
+    .image_ready (image_loaded),
+    .pixel_data  (line_buf_pixel),
+    .r           (sdimg_r),
+    .g           (sdimg_g),
+    .b           (sdimg_b)
+);
+
+//==============================================================================
 // Output Pixel Multiplexer
 //==============================================================================
 reg [7:0] out_r, out_g, out_b;
@@ -197,8 +402,20 @@ always @(posedge pix_clk) begin
             end
         end
 
-        MODE_OFF, MODE_PASSTHROUGH: begin
-            // Just background for now (HDMI input passthrough future)
+        MODE_PASSTHROUGH: begin
+            // Show SD card image if loaded, else background
+            if (image_loaded) begin
+                out_r <= sdimg_r;
+                out_g <= sdimg_g;
+                out_b <= sdimg_b;
+            end else begin
+                out_r <= bg_r;
+                out_g <= bg_g;
+                out_b <= bg_b;
+            end
+        end
+
+        MODE_OFF: begin
             out_r <= bg_r;
             out_g <= bg_g;
             out_b <= bg_b;

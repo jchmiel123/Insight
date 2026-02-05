@@ -9,9 +9,16 @@
         <File path="src/lib/video_timing.v" type="file.verilog" enable="1"/>
         <File path="src/lib/mode_controller.v" type="file.verilog" enable="1"/>
         <File path="src/lib/watermark_overlay.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/sd_spi.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/bmp_loader.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/fat32_reader.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/sdram.v" type="file.verilog" enable="1"/>
+        <File path="src/lib/sdram_framebuffer.v" type="file.verilog" enable="1"/>
         <File path="src/modes/slots_screensaver.v" type="file.verilog" enable="1"/>
         <File path="src/modes/info_screen.v" type="file.verilog" enable="1"/>
+        <File path="src/modes/sd_image_display.v" type="file.verilog" enable="1"/>
         <File path="src/ip/gowin_rpll/TMDS_rPLL.v" type="file.verilog" enable="1"/>
+        <File path="src/ip/gowin_rpll/SDRAM_rPLL.v" type="file.verilog" enable="1"/>
         <File path="src/ip/dvi_tx/dvi_tx.v" type="file.verilog" enable="1"/>
         <File path="src/insight.cst" type="file.cst" enable="1"/>
     </FileList>

@@ -11,11 +11,18 @@ add_file -type verilog "src/insight_top.v"
 add_file -type verilog "src/lib/video_timing.v"
 add_file -type verilog "src/lib/mode_controller.v"
 add_file -type verilog "src/lib/watermark_overlay.v"
+add_file -type verilog "src/lib/sd_spi.v"
+add_file -type verilog "src/lib/bmp_loader.v"
+add_file -type verilog "src/lib/fat32_reader.v"
+add_file -type verilog "src/lib/sdram.v"
+add_file -type verilog "src/lib/sdram_framebuffer.v"
 add_file -type verilog "src/modes/slots_screensaver.v"
 add_file -type verilog "src/modes/info_screen.v"
+add_file -type verilog "src/modes/sd_image_display.v"
 
 # IP cores
 add_file -type verilog "src/ip/gowin_rpll/TMDS_rPLL.v"
+add_file -type verilog "src/ip/gowin_rpll/SDRAM_rPLL.v"
 add_file -type verilog "src/ip/dvi_tx/dvi_tx.v"
 
 # Constraints
