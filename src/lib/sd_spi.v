@@ -1,5 +1,6 @@
 // SD Card SPI Controller
-// Handles initialization and block reads in SPI mode
+// Based on MIT 6.111 sd_controller with SDHC improvements from regymm
+// https://github.com/regymm/mit_sd_controller_improved
 //
 // Usage:
 //   1. Assert rst_n low, then release
@@ -7,23 +8,19 @@
 //   3. Set `rd_block` to desired block number, pulse `rd_start`
 //   4. Read bytes as `rd_data_valid` pulses, `rd_data` has byte
 //   5. `rd_done` pulses when 512-byte block is complete
-//
-// Clock: expects 27MHz system clock (divides internally for SPI)
-// Init SPI clock: ~211kHz (27MHz / 128)
-// Data SPI clock: ~13.5MHz (27MHz / 2)
 
 module sd_spi (
     input             clk,          // 27MHz system clock
     input             rst_n,
 
     // SD card SPI pins
-    output reg        sd_clk,
-    output reg        sd_mosi,
+    output            sd_clk,
+    output            sd_mosi,
     input             sd_miso,
     output reg        sd_cs_n,
 
     // Status
-    output reg        ready,        // Card initialized and ready
+    output            ready,        // Card initialized and ready
     output reg  [3:0] error_code,   // 0=ok, non-zero=error type
 
     // Block read interface
@@ -35,15 +32,21 @@ module sd_spi (
 );
 
 //==============================================================================
-// Clock Divider
+// Error codes
 //==============================================================================
-// Slow clock for init: 27MHz / 128 = ~211kHz
-// Fast clock for data: 27MHz / 2 = 13.5MHz
-reg        use_fast_clk;
-reg  [6:0] clk_div;
-wire       spi_tick_slow = (clk_div == 7'd63);   // half-period at /128
-wire       spi_tick_fast = 1'b1;                  // every cycle for /2
-wire       spi_tick = use_fast_clk ? spi_tick_fast : spi_tick_slow;
+localparam ERR_NONE    = 4'd0;
+localparam ERR_CMD0    = 4'd1;
+localparam ERR_CMD8    = 4'd2;
+localparam ERR_ACMD41  = 4'd3;
+localparam ERR_TIMEOUT = 4'd4;
+localparam ERR_READ    = 4'd5;
+
+//==============================================================================
+// Slow clock generation (~100kHz from 27MHz)
+// Toggle clk_pulse every 128 cycles = 27MHz/256 = ~105kHz
+//==============================================================================
+reg [7:0] clk_div;
+wire clk_pulse = (clk_div == 8'd0);
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n)
@@ -53,495 +56,267 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 //==============================================================================
-// SPI Bit Engine
+// State machine
 //==============================================================================
-reg  [7:0] spi_tx_data;
-reg  [7:0] spi_rx_data;
-reg  [3:0] spi_bit_cnt;
-reg        spi_active;
-reg        spi_byte_done;
-reg        spi_clk_phase;
+localparam RST              = 5'd0;
+localparam INIT             = 5'd1;
+localparam CMD0             = 5'd2;
+localparam CMD8             = 5'd3;
+localparam CMD55            = 5'd4;
+localparam CMD41            = 5'd5;
+localparam POLL_CMD         = 5'd6;
+localparam IDLE             = 5'd7;
+localparam READ_BLOCK       = 5'd8;
+localparam READ_BLOCK_WAIT  = 5'd9;
+localparam READ_BLOCK_DATA  = 5'd10;
+localparam READ_BLOCK_CRC   = 5'd11;
+localparam SEND_CMD         = 5'd12;
+localparam RECEIVE_BYTE_WAIT= 5'd13;
+localparam RECEIVE_BYTE     = 5'd14;
+localparam ERROR            = 5'd15;
+
+reg [4:0] state;
+reg [4:0] return_state;
+reg sclk_sig;
+reg [55:0] cmd_out;
+reg [7:0] recv_data;
+reg [2:0] response_type;
+
+reg [9:0] byte_counter;
+reg [9:0] bit_counter;
+reg [19:0] boot_counter;
+reg [15:0] timeout_counter;
+
+assign sd_clk = sclk_sig;
+assign sd_mosi = cmd_out[55];
+assign ready = (state == IDLE);
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        sd_clk <= 0;
-        sd_mosi <= 1;
-        spi_rx_data <= 8'hFF;
-        spi_bit_cnt <= 0;
-        spi_byte_done <= 0;
-        spi_clk_phase <= 0;
-    end else if (spi_active && spi_tick) begin
-        spi_byte_done <= 0;
-        if (!spi_clk_phase) begin
-            // Falling edge: drive MOSI
-            sd_clk <= 0;
-            if (spi_bit_cnt < 8)
-                sd_mosi <= spi_tx_data[7 - spi_bit_cnt];
-            else
-                sd_mosi <= 1;
-            spi_clk_phase <= 1;
-        end else begin
-            // Rising edge: sample MISO
-            sd_clk <= 1;
-            if (spi_bit_cnt < 8) begin
-                spi_rx_data <= {spi_rx_data[6:0], sd_miso};
-                spi_bit_cnt <= spi_bit_cnt + 1;
-                if (spi_bit_cnt == 7)
-                    spi_byte_done <= 1;
-            end
-            spi_clk_phase <= 0;
-        end
-    end else begin
-        spi_byte_done <= 0;
-    end
-end
-
-//==============================================================================
-// Main State Machine
-//==============================================================================
-localparam S_POWER_UP       = 4'd0;
-localparam S_SEND_CLOCKS    = 4'd1;
-localparam S_CMD0           = 4'd2;
-localparam S_CMD8           = 4'd3;
-localparam S_CMD55          = 4'd4;
-localparam S_ACMD41         = 4'd5;
-localparam S_CMD58          = 4'd6;
-localparam S_READY          = 4'd7;
-localparam S_READ_CMD       = 4'd8;
-localparam S_READ_WAIT      = 4'd9;
-localparam S_READ_DATA      = 4'd10;
-localparam S_READ_CRC       = 4'd11;
-localparam S_ERROR          = 4'd12;
-
-localparam ERR_NONE         = 4'd0;
-localparam ERR_CMD0         = 4'd1;
-localparam ERR_CMD8         = 4'd2;
-localparam ERR_ACMD41       = 4'd3;
-localparam ERR_TIMEOUT      = 4'd4;
-localparam ERR_READ         = 4'd5;
-localparam ERR_TOKEN        = 4'd6;
-
-reg  [3:0]  state;
-reg  [15:0] wait_cnt;
-reg  [15:0] retry_cnt;
-reg  [9:0]  byte_cnt;
-reg  [3:0]  cmd_idx;
-reg  [47:0] cmd_buf;
-reg  [7:0]  resp_byte;
-reg         sdhc;
-reg  [3:0]  resp_wait;
-
-wire [47:0] CMD0_W  = {8'h40, 32'h00000000, 8'h95};
-wire [47:0] CMD8_W  = {8'h48, 32'h000001AA, 8'h87};
-wire [47:0] CMD55_W = {8'h77, 32'h00000000, 8'h01};
-wire [47:0] ACMD41_W= {8'h69, 32'h40000000, 8'h01};
-wire [47:0] CMD58_W = {8'h7A, 32'h00000000, 8'h01};
-
-wire [31:0] rd_addr = sdhc ? rd_block : (rd_block << 9);
-wire [47:0] CMD17_W = {8'h51, rd_addr, 8'h01};
-
-reg  [2:0]  sub_state;
-localparam SUB_SEND      = 3'd0;
-localparam SUB_WAIT_RESP = 3'd1;
-localparam SUB_GOT_RESP  = 3'd2;
-localparam SUB_EXTRA     = 3'd3;
-
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        state <= S_POWER_UP;
-        ready <= 0;
-        error_code <= ERR_NONE;
+        state <= RST;
+        sclk_sig <= 0;
+        boot_counter <= 20'd100_000;  // ~4ms at 27MHz
         sd_cs_n <= 1;
-        spi_active <= 0;
-        use_fast_clk <= 0;
-        wait_cnt <= 0;
-        retry_cnt <= 0;
-        byte_cnt <= 0;
-        cmd_idx <= 0;
-        sub_state <= SUB_SEND;
-        sdhc <= 0;
+        cmd_out <= {56{1'b1}};
+        recv_data <= 8'hFF;
+        error_code <= ERR_NONE;
         rd_data_valid <= 0;
         rd_done <= 0;
-        spi_tx_data <= 8'hFF;
-        spi_bit_cnt <= 0;
-        resp_wait <= 0;
-    end else begin
+        timeout_counter <= 0;
+    end
+    else begin
         rd_data_valid <= 0;
         rd_done <= 0;
 
-        case (state)
-
-            S_POWER_UP: begin
-                sd_cs_n <= 1;
-                sd_mosi <= 1;
-                if (wait_cnt < 16'hFFFF)
-                    wait_cnt <= wait_cnt + 1;
-                else begin
-                    wait_cnt <= 0;
-                    byte_cnt <= 0;
-                    spi_active <= 1;
-                    spi_tx_data <= 8'hFF;
-                    spi_bit_cnt <= 0;
-                    spi_clk_phase <= 0;
-                    state <= S_SEND_CLOCKS;
-                end
-            end
-
-            S_SEND_CLOCKS: begin
-                sd_cs_n <= 1;
-                spi_tx_data <= 8'hFF;
-                if (spi_byte_done) begin
-                    byte_cnt <= byte_cnt + 1;
-                    spi_bit_cnt <= 0;
-                    if (byte_cnt >= 10) begin
-                        sd_cs_n <= 0;
-                        state <= S_CMD0;
-                        sub_state <= SUB_SEND;
-                        cmd_buf <= CMD0_W;
-                        cmd_idx <= 0;
-                        spi_bit_cnt <= 0;
-                    end
-                end
-            end
-
-            S_CMD0: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data != 8'hFF) begin
-                                resp_byte <= spi_rx_data;
-                                sub_state <= SUB_GOT_RESP;
-                            end else if (resp_wait == 0) begin
-                                state <= S_ERROR;
-                                error_code <= ERR_CMD0;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                    SUB_GOT_RESP: begin
-                        if (resp_byte == 8'h01) begin
-                            state <= S_CMD8;
-                            sub_state <= SUB_SEND;
-                            cmd_buf <= CMD8_W;
-                            cmd_idx <= 0;
-                            spi_bit_cnt <= 0;
-                        end else begin
-                            state <= S_ERROR;
-                            error_code <= ERR_CMD0;
-                        end
-                    end
-                endcase
-            end
-
-            S_CMD8: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data != 8'hFF) begin
-                                resp_byte <= spi_rx_data;
-                                byte_cnt <= 0;
-                                sub_state <= SUB_EXTRA;
-                            end else if (resp_wait == 0) begin
-                                // No CMD8 response = SD v1, skip to ACMD41
-                                state <= S_CMD55;
-                                sub_state <= SUB_SEND;
-                                cmd_buf <= CMD55_W;
-                                cmd_idx <= 0;
-                                retry_cnt <= 0;
-                                spi_bit_cnt <= 0;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                    SUB_EXTRA: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            byte_cnt <= byte_cnt + 1;
-                            spi_bit_cnt <= 0;
-                            if (byte_cnt == 3) begin
-                                state <= S_CMD55;
-                                sub_state <= SUB_SEND;
-                                cmd_buf <= CMD55_W;
-                                cmd_idx <= 0;
-                                retry_cnt <= 0;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                endcase
-            end
-
-            S_CMD55: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data != 8'hFF) begin
-                                state <= S_ACMD41;
-                                sub_state <= SUB_SEND;
-                                cmd_buf <= ACMD41_W;
-                                cmd_idx <= 0;
-                                spi_bit_cnt <= 0;
-                            end else if (resp_wait == 0) begin
-                                state <= S_ERROR;
-                                error_code <= ERR_ACMD41;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                endcase
-            end
-
-            S_ACMD41: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data != 8'hFF) begin
-                                resp_byte <= spi_rx_data;
-                                sub_state <= SUB_GOT_RESP;
-                            end else if (resp_wait == 0) begin
-                                state <= S_ERROR;
-                                error_code <= ERR_ACMD41;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                    SUB_GOT_RESP: begin
-                        if (resp_byte == 8'h00) begin
-                            state <= S_CMD58;
-                            sub_state <= SUB_SEND;
-                            cmd_buf <= CMD58_W;
-                            cmd_idx <= 0;
-                            spi_bit_cnt <= 0;
-                        end else if (retry_cnt < 16'hFFFF) begin
-                            retry_cnt <= retry_cnt + 1;
-                            state <= S_CMD55;
-                            sub_state <= SUB_SEND;
-                            cmd_buf <= CMD55_W;
-                            cmd_idx <= 0;
-                            spi_bit_cnt <= 0;
-                        end else begin
-                            state <= S_ERROR;
-                            error_code <= ERR_ACMD41;
-                        end
-                    end
-                endcase
-            end
-
-            S_CMD58: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data != 8'hFF) begin
-                                resp_byte <= spi_rx_data;
-                                byte_cnt <= 0;
-                                sub_state <= SUB_EXTRA;
-                            end else if (resp_wait == 0) begin
-                                sdhc <= 1;
-                                use_fast_clk <= 1;
-                                ready <= 1;
-                                sd_cs_n <= 1;
-                                state <= S_READY;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                    SUB_EXTRA: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (byte_cnt == 0)
-                                sdhc <= spi_rx_data[6];
-                            byte_cnt <= byte_cnt + 1;
-                            if (byte_cnt == 3) begin
-                                use_fast_clk <= 1;
-                                ready <= 1;
-                                sd_cs_n <= 1;
-                                state <= S_READY;
-                            end
-                        end
-                    end
-                endcase
-            end
-
-            S_READY: begin
-                sd_cs_n <= 1;
-                spi_active <= 1;
-                if (rd_start) begin
-                    state <= S_READ_CMD;
-                    sub_state <= SUB_SEND;
-                    cmd_buf <= CMD17_W;
-                    cmd_idx <= 0;
-                    sd_cs_n <= 0;
-                    spi_bit_cnt <= 0;
-                end
-            end
-
-            S_READ_CMD: begin
-                sd_cs_n <= 0;
-                case (sub_state)
-                    SUB_SEND: begin
-                        spi_tx_data <= cmd_buf[47 - cmd_idx*8 -: 8];
-                        if (spi_byte_done) begin
-                            cmd_idx <= cmd_idx + 1;
-                            spi_bit_cnt <= 0;
-                            if (cmd_idx == 5) begin
-                                sub_state <= SUB_WAIT_RESP;
-                                resp_wait <= 8;
-                                spi_tx_data <= 8'hFF;
-                                spi_bit_cnt <= 0;
-                            end
-                        end
-                    end
-                    SUB_WAIT_RESP: begin
-                        spi_tx_data <= 8'hFF;
-                        if (spi_byte_done) begin
-                            spi_bit_cnt <= 0;
-                            if (spi_rx_data == 8'h00) begin
-                                state <= S_READ_WAIT;
-                                wait_cnt <= 0;
-                            end else if (spi_rx_data != 8'hFF) begin
-                                state <= S_ERROR;
-                                error_code <= ERR_READ;
-                            end else if (resp_wait == 0) begin
-                                state <= S_ERROR;
-                                error_code <= ERR_READ;
-                            end else
-                                resp_wait <= resp_wait - 1;
-                        end
-                    end
-                endcase
-            end
-
-            S_READ_WAIT: begin
-                sd_cs_n <= 0;
-                spi_tx_data <= 8'hFF;
-                if (spi_byte_done) begin
-                    spi_bit_cnt <= 0;
-                    if (spi_rx_data == 8'hFE) begin
-                        state <= S_READ_DATA;
-                        byte_cnt <= 0;
-                    end else if (wait_cnt > 16'hFFFF) begin
-                        state <= S_ERROR;
-                        error_code <= ERR_TOKEN;
-                    end else
-                        wait_cnt <= wait_cnt + 1;
-                end
-            end
-
-            S_READ_DATA: begin
-                sd_cs_n <= 0;
-                spi_tx_data <= 8'hFF;
-                if (spi_byte_done) begin
-                    spi_bit_cnt <= 0;
-                    rd_data <= spi_rx_data;
-                    rd_data_valid <= 1;
-                    byte_cnt <= byte_cnt + 1;
-                    if (byte_cnt == 511) begin
-                        state <= S_READ_CRC;
-                        byte_cnt <= 0;
-                    end
-                end
-            end
-
-            S_READ_CRC: begin
-                sd_cs_n <= 0;
-                spi_tx_data <= 8'hFF;
-                if (spi_byte_done) begin
-                    spi_bit_cnt <= 0;
-                    byte_cnt <= byte_cnt + 1;
-                    if (byte_cnt == 1) begin
+        if (clk_pulse) begin
+            case (state)
+                RST: begin
+                    if (boot_counter == 0) begin
+                        sclk_sig <= 0;
+                        cmd_out <= {56{1'b1}};
+                        byte_counter <= 0;
+                        bit_counter <= 160;  // 160 init clocks (>74 required)
                         sd_cs_n <= 1;
-                        rd_done <= 1;
-                        state <= S_READY;
+                        state <= INIT;
+                    end
+                    else begin
+                        boot_counter <= boot_counter - 1;
+                        // Generate slow clock during boot
+                        if (boot_counter[2])
+                            sclk_sig <= ~sclk_sig;
                     end
                 end
-            end
 
-            S_ERROR: begin
-                sd_cs_n <= 1;
-                ready <= 0;
-            end
-        endcase
+                INIT: begin
+                    if (bit_counter == 0) begin
+                        sd_cs_n <= 0;
+                        state <= CMD0;
+                        timeout_counter <= 16'hFFFF;
+                    end
+                    else begin
+                        bit_counter <= bit_counter - 1;
+                        sclk_sig <= ~sclk_sig;
+                    end
+                end
+
+                CMD0: begin
+                    // CMD0: GO_IDLE_STATE
+                    cmd_out <= 56'hFF_40_00_00_00_00_95;
+                    bit_counter <= 55;
+                    response_type <= 3'd1;
+                    return_state <= CMD8;
+                    state <= SEND_CMD;
+                end
+
+                CMD8: begin
+                    // CMD8: SEND_IF_COND (voltage check)
+                    // Response is R7 (5 bytes)
+                    cmd_out <= 56'hFF_48_00_00_01_AA_87;
+                    bit_counter <= 55;
+                    response_type <= 3'd7;  // R7 response
+                    return_state <= CMD55;
+                    state <= SEND_CMD;
+                end
+
+                CMD55: begin
+                    // CMD55: APP_CMD prefix
+                    cmd_out <= 56'hFF_77_00_00_00_00_01;
+                    bit_counter <= 55;
+                    response_type <= 3'd1;
+                    return_state <= CMD41;
+                    state <= SEND_CMD;
+                end
+
+                CMD41: begin
+                    // ACMD41: SD_SEND_OP_COND (with HCS bit set for SDHC)
+                    cmd_out <= 56'hFF_69_40_00_00_00_01;
+                    bit_counter <= 55;
+                    response_type <= 3'd1;
+                    return_state <= POLL_CMD;
+                    state <= SEND_CMD;
+                end
+
+                POLL_CMD: begin
+                    if (recv_data[0] == 0) begin
+                        // Card ready (response 0x00)
+                        state <= IDLE;
+                    end
+                    else if (timeout_counter == 0) begin
+                        // Timeout waiting for card
+                        error_code <= ERR_ACMD41;
+                        state <= ERROR;
+                    end
+                    else begin
+                        // Not ready yet, retry CMD55+ACMD41
+                        timeout_counter <= timeout_counter - 1;
+                        state <= CMD55;
+                    end
+                end
+
+                IDLE: begin
+                    sd_cs_n <= 1;
+                    if (rd_start) begin
+                        sd_cs_n <= 0;
+                        state <= READ_BLOCK;
+                    end
+                end
+
+                READ_BLOCK: begin
+                    // CMD17: READ_SINGLE_BLOCK
+                    // SDHC uses block addressing (not byte)
+                    cmd_out <= {16'hFF_51, rd_block, 8'hFF};
+                    bit_counter <= 55;
+                    response_type <= 3'd1;
+                    return_state <= READ_BLOCK_WAIT;
+                    state <= SEND_CMD;
+                end
+
+                READ_BLOCK_WAIT: begin
+                    // Wait for data token (0xFE)
+                    if (sclk_sig == 1 && sd_miso == 0) begin
+                        byte_counter <= 511;
+                        bit_counter <= 7;
+                        return_state <= READ_BLOCK_DATA;
+                        state <= RECEIVE_BYTE;
+                    end
+                    sclk_sig <= ~sclk_sig;
+                end
+
+                READ_BLOCK_DATA: begin
+                    rd_data <= recv_data;
+                    rd_data_valid <= 1;
+                    if (byte_counter == 0) begin
+                        bit_counter <= 7;
+                        return_state <= READ_BLOCK_CRC;
+                        state <= RECEIVE_BYTE;
+                    end
+                    else begin
+                        byte_counter <= byte_counter - 1;
+                        bit_counter <= 7;
+                        return_state <= READ_BLOCK_DATA;
+                        state <= RECEIVE_BYTE;
+                    end
+                end
+
+                READ_BLOCK_CRC: begin
+                    // Read and discard 2 CRC bytes
+                    if (byte_counter == 0) begin
+                        byte_counter <= 1;
+                        bit_counter <= 7;
+                        return_state <= READ_BLOCK_CRC;
+                        state <= RECEIVE_BYTE;
+                    end
+                    else begin
+                        rd_done <= 1;
+                        sd_cs_n <= 1;
+                        state <= IDLE;
+                    end
+                end
+
+                SEND_CMD: begin
+                    if (sclk_sig == 1) begin
+                        if (bit_counter == 0) begin
+                            state <= RECEIVE_BYTE_WAIT;
+                        end
+                        else begin
+                            bit_counter <= bit_counter - 1;
+                            cmd_out <= {cmd_out[54:0], 1'b1};
+                        end
+                    end
+                    sclk_sig <= ~sclk_sig;
+                end
+
+                RECEIVE_BYTE_WAIT: begin
+                    if (sclk_sig == 1) begin
+                        if (sd_miso == 0) begin
+                            // Start bit received
+                            recv_data <= 0;
+                            case (response_type)
+                                3'd1: bit_counter <= 6;   // R1: 7 more bits
+                                3'd7: bit_counter <= 38;  // R7: 39 more bits (we only keep last 8)
+                                default: bit_counter <= 6;
+                            endcase
+                            state <= RECEIVE_BYTE;
+                        end
+                        else if (timeout_counter == 0) begin
+                            // No response - error
+                            if (return_state == CMD8) begin
+                                // CMD8 timeout is OK (older SD cards)
+                                state <= CMD55;
+                            end
+                            else begin
+                                error_code <= ERR_CMD0;
+                                state <= ERROR;
+                            end
+                        end
+                        else begin
+                            timeout_counter <= timeout_counter - 1;
+                        end
+                    end
+                    sclk_sig <= ~sclk_sig;
+                end
+
+                RECEIVE_BYTE: begin
+                    if (sclk_sig == 1) begin
+                        recv_data <= {recv_data[6:0], sd_miso};
+                        if (bit_counter == 0) begin
+                            state <= return_state;
+                        end
+                        else begin
+                            bit_counter <= bit_counter - 1;
+                        end
+                    end
+                    sclk_sig <= ~sclk_sig;
+                end
+
+                ERROR: begin
+                    sd_cs_n <= 1;
+                    // Stay in error state
+                end
+
+                default: state <= RST;
+            endcase
+        end
     end
 end
 

@@ -71,8 +71,9 @@ TMDS_rPLL u_pll (
 );
 
 // Divide by 5 for pixel clock: 371.25 / 5 = 74.25 MHz
+// Just use pll_lock directly - no extra delays
 CLKDIV u_clkdiv (
-    .RESETN (I_rst_n & pll_lock),
+    .RESETN (pll_lock),
     .HCLKIN (serial_clk),
     .CLKOUT (pix_clk),
     .CALIB  (1'b1)
@@ -92,7 +93,8 @@ SDRAM_rPLL u_sdram_pll (
     .lock   (sdram_pll_lock)
 );
 
-assign sys_rst_n = I_rst_n & pll_lock & sdram_pll_lock;
+// For debug: don't wait for SDRAM PLL - just use main PLL lock
+assign sys_rst_n = pll_lock;
 
 //==============================================================================
 // Video Timing Generator (720p)
@@ -156,16 +158,64 @@ slots_screensaver u_slots (
 // Info/test pattern for other modes
 wire [7:0] info_r, info_g, info_b;
 
+// Cross clock domain for debug signals (I_clk -> pix_clk)
+// Using simple double-flop sync for multi-bit values (ok for display)
+reg [4:0]  fat_state_sync1, fat_state_sync2;
+reg [3:0]  fat_error_sync1, fat_error_sync2;
+reg [3:0]  sd_error_sync1, sd_error_sync2;
+reg        sd_ready_sync1, sd_ready_sync2;
+reg        fat_ready_sync1, fat_ready_sync2;
+reg        image_loaded_sync1, image_loaded_sync2;
+reg [7:0]  dbg_byte0_sync, dbg_byte1_sync, dbg_byte510_sync, dbg_byte511_sync;
+reg [9:0]  dbg_blk_wr_idx_sync;
+reg [9:0]  dbg_dir_idx_sync;
+reg [31:0] dbg_part_lba_sync, dbg_data_start_sync, dbg_root_cluster_sync, dbg_dir_lba_sync;
+
+always @(posedge pix_clk) begin
+    fat_state_sync1 <= fat_debug_state; fat_state_sync2 <= fat_state_sync1;
+    fat_error_sync1 <= fat_error_code;  fat_error_sync2 <= fat_error_sync1;
+    sd_error_sync1 <= sd_error_code;    sd_error_sync2 <= sd_error_sync1;
+    sd_ready_sync1 <= sd_ready;         sd_ready_sync2 <= sd_ready_sync1;
+    fat_ready_sync1 <= fat_ready;       fat_ready_sync2 <= fat_ready_sync1;
+    image_loaded_sync1 <= image_loaded; image_loaded_sync2 <= image_loaded_sync1;
+    dbg_byte0_sync <= fat_debug_byte0;
+    dbg_byte1_sync <= fat_debug_byte1;
+    dbg_byte510_sync <= fat_debug_byte510;
+    dbg_byte511_sync <= fat_debug_byte511;
+    dbg_blk_wr_idx_sync <= fat_debug_blk_wr_idx;
+    dbg_dir_idx_sync <= fat_debug_dir_idx;
+    dbg_part_lba_sync <= fat_debug_part_lba;
+    dbg_data_start_sync <= fat_debug_data_start;
+    dbg_root_cluster_sync <= fat_debug_root_cluster;
+    dbg_dir_lba_sync <= fat_debug_dir_lba;
+end
+
 info_screen u_info (
-    .clk   (pix_clk),
-    .rst_n (sys_rst_n),
-    .px    (px),
-    .py    (py),
-    .de    (de),
-    .mode  (current_mode),
-    .r     (info_r),
-    .g     (info_g),
-    .b     (info_b)
+    .clk           (pix_clk),
+    .rst_n         (sys_rst_n),
+    .px            (px),
+    .py            (py),
+    .de            (de),
+    .mode          (current_mode),
+    .fat_state     (fat_state_sync2),
+    .fat_error     (fat_error_sync2),
+    .sd_error      (sd_error_sync2),
+    .sd_ready      (sd_ready_sync2),
+    .fat_ready     (fat_ready_sync2),
+    .image_loaded  (image_loaded_sync2),
+    .dbg_byte0     (dbg_byte0_sync),
+    .dbg_byte1     (dbg_byte1_sync),
+    .dbg_byte510   (dbg_byte510_sync),
+    .dbg_byte511   (dbg_byte511_sync),
+    .dbg_blk_wr_idx(dbg_blk_wr_idx_sync),
+    .dbg_dir_idx   (dbg_dir_idx_sync),
+    .dbg_part_lba  (dbg_part_lba_sync),
+    .dbg_data_start(dbg_data_start_sync),
+    .dbg_root_cluster(dbg_root_cluster_sync),
+    .dbg_dir_lba   (dbg_dir_lba_sync),
+    .r             (info_r),
+    .g             (info_g),
+    .b             (info_b)
 );
 
 //==============================================================================
@@ -201,8 +251,8 @@ wire        sd_rd_data_valid;
 wire        sd_rd_done;
 
 sd_spi u_sd (
-    .clk          (clk_sdram),     // 27MHz for SPI timing
-    .rst_n        (sdram_pll_lock),
+    .clk          (I_clk),         // 27MHz crystal directly
+    .rst_n        (pll_lock),      // Use main PLL lock
     .sd_clk       (sd_clk),
     .sd_mosi      (sd_mosi),
     .sd_miso      (sd_miso),
@@ -223,25 +273,30 @@ wire        fat_file_done;
 wire        fat_ready;
 wire        fat_error;
 wire [3:0]  fat_error_code;
+wire [4:0]  fat_debug_state;
+wire [7:0]  fat_debug_byte0, fat_debug_byte1, fat_debug_byte510, fat_debug_byte511;
+wire [9:0]  fat_debug_blk_wr_idx;
+wire [9:0]  fat_debug_dir_idx;
+wire [31:0] fat_debug_part_lba, fat_debug_data_start, fat_debug_root_cluster, fat_debug_dir_lba;
 
 // Auto-start loading on boot
 reg         boot_start;
-reg  [1:0]  boot_delay;
-always @(posedge clk_sdram or negedge sdram_pll_lock) begin
-    if (!sdram_pll_lock) begin
+reg  [19:0] boot_delay;  // Longer delay for SD card power-up
+always @(posedge I_clk or negedge pll_lock) begin
+    if (!pll_lock) begin
         boot_start <= 0;
         boot_delay <= 0;
-    end else if (boot_delay < 2'd3) begin
+    end else if (boot_delay < 20'hFFFFF) begin
         boot_delay <= boot_delay + 1;
-        boot_start <= (boot_delay == 2'd2);
+        boot_start <= (boot_delay == 20'hFFFFE);
     end else begin
         boot_start <= 0;
     end
 end
 
 fat32_reader u_fat32 (
-    .clk            (clk_sdram),
-    .rst_n          (sdram_pll_lock),
+    .clk            (I_clk),
+    .rst_n          (pll_lock),
     .start          (boot_start),
     .sd_block       (sd_rd_block),
     .sd_rd_start    (sd_rd_start),
@@ -254,7 +309,18 @@ fat32_reader u_fat32 (
     .file_done      (fat_file_done),
     .ready          (fat_ready),
     .error          (fat_error),
-    .error_code     (fat_error_code)
+    .error_code     (fat_error_code),
+    .debug_state    (fat_debug_state),
+    .debug_byte0    (fat_debug_byte0),
+    .debug_byte1    (fat_debug_byte1),
+    .debug_byte510  (fat_debug_byte510),
+    .debug_byte511  (fat_debug_byte511),
+    .debug_blk_wr_idx(fat_debug_blk_wr_idx),
+    .debug_dir_idx  (fat_debug_dir_idx),
+    .debug_part_lba (fat_debug_part_lba),
+    .debug_data_start(fat_debug_data_start),
+    .debug_root_cluster(fat_debug_root_cluster),
+    .debug_dir_lba  (fat_debug_dir_lba)
 );
 
 // BMP Loader (receives byte stream from FAT32 reader)
@@ -268,8 +334,8 @@ bmp_loader #(
     .IMG_W (1280),
     .IMG_H (720)
 ) u_bmp (
-    .clk            (clk_sdram),
-    .rst_n          (sdram_pll_lock),
+    .clk            (I_clk),
+    .rst_n          (pll_lock),
     .start          (fat_ready),
     .file_data      (fat_file_data),
     .file_data_valid(fat_file_data_valid),
@@ -403,15 +469,16 @@ always @(posedge pix_clk) begin
         end
 
         MODE_PASSTHROUGH: begin
-            // Show SD card image if loaded, else background
+            // Show SD card image if loaded, else boot/debug screen
             if (image_loaded) begin
                 out_r <= sdimg_r;
                 out_g <= sdimg_g;
                 out_b <= sdimg_b;
             end else begin
-                out_r <= bg_r;
-                out_g <= bg_g;
-                out_b <= bg_b;
+                // Show boot screen with debug info while loading
+                out_r <= info_r;
+                out_g <= info_g;
+                out_b <= info_b;
             end
         end
 
@@ -440,11 +507,15 @@ always @(posedge pix_clk) begin
         heartbeat <= heartbeat + 1;
 end
 
-// LEDs show current mode (active low)
-assign O_led[2:0] = ~current_mode;
-assign O_led[3] = ~pll_lock;           // PLL lock indicator
-assign O_led[4] = ~heartbeat[25];      // Heartbeat (~1Hz)
-assign O_led[5] = ~de;                 // DE activity (always flickering)
+// LEDs show FAT32 debug info
+// When in ERROR state (15): show error code on LEDs 0-3
+// Otherwise: show state on LEDs 0-4
+// Error codes: 1=NO_MBR, 2=NO_FAT32, 3=NO_BOOT, 4=NO_BMP, 5=SD_FAIL
+// LED 5: image_loaded
+wire in_error_state = (fat_debug_state == 5'd15);
+assign O_led[3:0] = in_error_state ? ~fat_error_code : ~fat_debug_state[3:0];
+assign O_led[4] = in_error_state ? 1'b1 : ~fat_debug_state[4];  // Off when showing error
+assign O_led[5] = ~image_loaded;
 
 //==============================================================================
 // HDMI/DVI Transmitter

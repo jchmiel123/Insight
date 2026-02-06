@@ -1,0 +1,108 @@
+GowinSynthesis start
+Running parser ...
+Analyzing Verilog file 'D:\CodeLab\Insight\src\insight_top.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\video_timing.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\mode_controller.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\watermark_overlay.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\sd_spi.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\bmp_loader.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\fat32_reader.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\sdram.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\lib\sdram_framebuffer.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\modes\slots_screensaver.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\modes\info_screen.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\modes\sd_image_display.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\ip\gowin_rpll\TMDS_rPLL.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\ip\gowin_rpll\SDRAM_rPLL.v'
+Analyzing Verilog file 'D:\CodeLab\Insight\src\ip\dvi_tx\dvi_tx.v'
+WARN  (EX3073) : Port 'dout32' remains unconnected for this instance("D:\CodeLab\Insight\src\insight_top.v":384)
+Compiling module 'insight_top'("D:\CodeLab\Insight\src\insight_top.v":19)
+Compiling module 'TMDS_rPLL'("D:\CodeLab\Insight\src\ip\gowin_rpll\TMDS_rPLL.v":9)
+Compiling module 'SDRAM_rPLL'("D:\CodeLab\Insight\src\ip\gowin_rpll\SDRAM_rPLL.v":6)
+Compiling module 'video_timing'("D:\CodeLab\Insight\src\lib\video_timing.v":8)
+Compiling module 'mode_controller'("D:\CodeLab\Insight\src\lib\mode_controller.v":5)
+WARN  (EX3791) : Expression size 22 truncated to fit in target size 21("D:\CodeLab\Insight\src\lib\mode_controller.v":48)
+Compiling module 'slots_screensaver'("D:\CodeLab\Insight\src\modes\slots_screensaver.v":5)
+WARN  (EX3791) : Expression size 21 truncated to fit in target size 20("D:\CodeLab\Insight\src\modes\slots_screensaver.v":54)
+WARN  (EX3791) : Expression size 21 truncated to fit in target size 20("D:\CodeLab\Insight\src\modes\slots_screensaver.v":61)
+WARN  (EX3791) : Expression size 25 truncated to fit in target size 24("D:\CodeLab\Insight\src\modes\slots_screensaver.v":110)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":153)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":166)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":178)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":203)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":245)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":246)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":247)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\modes\slots_screensaver.v":248)
+Compiling module 'info_screen'("D:\CodeLab\Insight\src\modes\info_screen.v":4)
+WARN  (EX3791) : Expression size 10 truncated to fit in target size 3("D:\CodeLab\Insight\src\modes\info_screen.v":94)
+WARN  (EX3791) : Expression size 10 truncated to fit in target size 3("D:\CodeLab\Insight\src\modes\info_screen.v":95)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 5("D:\CodeLab\Insight\src\modes\info_screen.v":96)
+Compiling module 'watermark_overlay'("D:\CodeLab\Insight\src\lib\watermark_overlay.v":5)
+WARN  (EX3791) : Expression size 25 truncated to fit in target size 24("D:\CodeLab\Insight\src\lib\watermark_overlay.v":31)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\watermark_overlay.v":40)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\watermark_overlay.v":41)
+WARN  (EX3791) : Expression size 28 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\watermark_overlay.v":60)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 4("D:\CodeLab\Insight\src\lib\watermark_overlay.v":62)
+Compiling module 'sd_spi'("D:\CodeLab\Insight\src\lib\sd_spi.v":12)
+WARN  (EX3791) : Expression size 9 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\sd_spi.v":55)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 20("D:\CodeLab\Insight\src\lib\sd_spi.v":123)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\sd_spi.v":137)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\sd_spi.v":191)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\sd_spi.v":234)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\sd_spi.v":262)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\sd_spi.v":293)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\sd_spi.v":306)
+WARN  (EX3791) : Expression size 21 truncated to fit in target size 20("D:\CodeLab\Insight\src\insight_top.v":290)
+Compiling module 'fat32_reader'("D:\CodeLab\Insight\src\lib\fat32_reader.v":21)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":249)
+WARN  (EX3791) : Expression size 9 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\fat32_reader.v":359)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":382)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":385)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":388)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":391)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":419)
+WARN  (EX3791) : Expression size 11 truncated to fit in target size 10("D:\CodeLab\Insight\src\lib\fat32_reader.v":450)
+WARN  (EX3791) : Expression size 9 truncated to fit in target size 8("D:\CodeLab\Insight\src\lib\fat32_reader.v":459)
+Compiling module 'bmp_loader'("D:\CodeLab\Insight\src\lib\bmp_loader.v":12)
+WARN  (EX3791) : Expression size 7 truncated to fit in target size 6("D:\CodeLab\Insight\src\lib\bmp_loader.v":122)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 21("D:\CodeLab\Insight\src\lib\bmp_loader.v":199)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\bmp_loader.v":202)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\bmp_loader.v":205)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\bmp_loader.v":208)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("D:\CodeLab\Insight\src\lib\bmp_loader.v":216)
+Compiling module 'sdram(FREQ=27000000)'("D:\CodeLab\Insight\src\lib\sdram.v":28)
+WARN  (EX3791) : Expression size 16 truncated to fit in target size 15("D:\CodeLab\Insight\src\lib\sdram.v":262)
+Compiling module 'sdram_framebuffer'("D:\CodeLab\Insight\src\lib\sdram_framebuffer.v":18)
+Extracting RAM for identifier 'line_buf_0'("D:\CodeLab\Insight\src\lib\sdram_framebuffer.v":58)
+Extracting RAM for identifier 'line_buf_1'("D:\CodeLab\Insight\src\lib\sdram_framebuffer.v":59)
+WARN  (EX3791) : Expression size 10 truncated to fit in target size 9("D:\CodeLab\Insight\src\lib\sdram_framebuffer.v":151)
+WARN  (EX3791) : Expression size 12 truncated to fit in target size 11("D:\CodeLab\Insight\src\lib\sdram_framebuffer.v":288)
+Compiling module 'sd_image_display'("D:\CodeLab\Insight\src\modes\sd_image_display.v":6)
+WARN  (EX3041) : Right shift count >= width of value("D:\CodeLab\Insight\src\insight_top.v":461)
+WARN  (EX3041) : Right shift count >= width of value("D:\CodeLab\Insight\src\insight_top.v":462)
+WARN  (EX3041) : Right shift count >= width of value("D:\CodeLab\Insight\src\insight_top.v":463)
+WARN  (EX3791) : Expression size 27 truncated to fit in target size 26("D:\CodeLab\Insight\src\insight_top.v":507)
+Compiling module 'DVI_TX_Top'("D:\CodeLab\Insight\src\ip\dvi_tx\dvi_tx.v":1072)
+Compiling module '**'("D:\CodeLab\Insight\src\ip\dvi_tx\dvi_tx.v":1071)
+NOTE  (EX0101) : Current top module is "insight_top"
+[5%] Running netlist conversion ...
+Running device independent optimization ...
+[10%] Optimizing Phase 0 completed
+[15%] Optimizing Phase 1 completed
+[25%] Optimizing Phase 2 completed
+Running inference ...
+[30%] Inferring Phase 0 completed
+[40%] Inferring Phase 1 completed
+[50%] Inferring Phase 2 completed
+[55%] Inferring Phase 3 completed
+Running technical mapping ...
+[60%] Tech-Mapping Phase 0 completed
+[65%] Tech-Mapping Phase 1 completed
+[75%] Tech-Mapping Phase 2 completed
+[80%] Tech-Mapping Phase 3 completed
+[90%] Tech-Mapping Phase 4 completed
+WARN  (NL0002) : The module "watermark_overlay" instantiated to "u_watermark" is swept in optimizing("D:\CodeLab\Insight\src\insight_top.v":240)
+[95%] Generate netlist file "D:\CodeLab\Insight\impl\gwsynthesis\insight.vg" completed
+[100%] Generate report file "D:\CodeLab\Insight\impl\gwsynthesis\insight_syn.rpt.html" completed
+GowinSynthesis finish

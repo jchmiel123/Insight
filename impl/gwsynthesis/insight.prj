@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gowin-synthesis-project>
+<Project>
+    <Version>beta</Version>
+    <Device id="GW2AR-18C" package="QFN88" speed="8" partNumber="GW2AR-LV18QN88C8/I7"/>
+    <FileList>
+        <File path="D:\CodeLab\Insight\src\insight_top.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\video_timing.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\mode_controller.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\watermark_overlay.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\sd_spi.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\bmp_loader.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\fat32_reader.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\sdram.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\lib\sdram_framebuffer.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\modes\slots_screensaver.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\modes\info_screen.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\modes\sd_image_display.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\ip\gowin_rpll\TMDS_rPLL.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\ip\gowin_rpll\SDRAM_rPLL.v" type="verilog"/>
+        <File path="D:\CodeLab\Insight\src\ip\dvi_tx\dvi_tx.v" type="verilog"/>
+    </FileList>
+    <OptionList>
+        <Option type="disable_insert_pad" value="0"/>
+        <Option type="global_freq" value="100.000"/>
+        <Option type="looplimit" value="2000"/>
+        <Option type="output_file" value="D:\CodeLab\Insight\impl\gwsynthesis\insight.vg"/>
+        <Option type="print_all_synthesis_warning" value="0"/>
+        <Option type="ram_rw_check" value="0"/>
+        <Option type="top_module" value="insight_top"/>
+        <Option type="vcc" value="1.0"/>
+        <Option type="verilog_language" value="verilog-2001"/>
+        <Option type="vhdl_language" value="vhdl-1993"/>
+    </OptionList>
+</Project>

@@ -39,7 +39,22 @@ module fat32_reader (
     // Status
     output reg        ready,           // File found, streaming data
     output reg        error,           // Something went wrong
-    output reg  [3:0] error_code
+    output reg  [3:0] error_code,
+    output      [4:0] debug_state,     // Debug: current state
+
+    // Debug outputs for HDMI display
+    output     [7:0]  debug_byte0,     // First bytes of block buffer
+    output     [7:0]  debug_byte1,
+    output     [7:0]  debug_byte510,   // MBR signature location
+    output     [7:0]  debug_byte511,
+    output     [9:0]  debug_blk_wr_idx, // How many bytes written to buffer
+    output     [9:0]  debug_dir_idx,   // Directory entry index when scanning
+
+    // Additional debug for FAT32 params
+    output     [31:0] debug_part_lba,
+    output     [31:0] debug_data_start,
+    output     [31:0] debug_root_cluster,
+    output     [31:0] debug_dir_lba     // Actual LBA being read for root dir
 );
 
 //==============================================================================
@@ -71,11 +86,35 @@ localparam S_NEXT_SECTOR     = 5'd12;  // Move to next sector in cluster
 localparam S_NEXT_CLUSTER    = 5'd13;  // Follow FAT chain
 localparam S_DONE            = 5'd14;
 localparam S_ERROR           = 5'd15;
-localparam S_REQUEST_BLOCK   = 5'd16;  // Request SD block read
-localparam S_WAIT_BLOCK      = 5'd17;  // Wait for block data
+localparam S_REQUEST_BLOCK   = 5'd16;  // Request SD block read (setup)
+localparam S_START_READ      = 5'd17;  // Assert rd_start after block addr stable
+localparam S_WAIT_BLOCK      = 5'd18;  // Wait for block data
+localparam S_WAIT_REGS       = 5'd19;  // Wait 1 cycle for registers to settle
 
 reg  [4:0]  state;
 reg  [4:0]  return_state;    // State to return to after block read
+assign debug_state = state;
+
+// Debug: expose buffer contents
+// When scanning dir, show first 2 bytes of the current entry at dir_entry_idx
+// Otherwise show buffer[0] and buffer[11]
+wire [8:0] dir_byte0_idx = dir_entry_idx[8:0];
+wire [8:0] dir_byte11_idx = dir_entry_idx[8:0] + 9'd11;
+assign debug_byte0 = (state == S_SCAN_DIR) ? blk_buf[dir_byte0_idx] : blk_buf[0];
+assign debug_byte1 = (state == S_SCAN_DIR) ? blk_buf[dir_byte11_idx] : blk_buf[11];
+assign debug_byte510 = blk_buf[510];
+assign debug_byte511 = blk_buf[511];
+assign debug_blk_wr_idx = blk_wr_idx;
+assign debug_dir_idx = dir_entry_idx;
+
+// Additional FAT32 debug
+assign debug_part_lba = part_lba;
+assign debug_data_start = data_start_lba;
+// Row 4: Show root_cluster (low 16 bits) and buffer[0], buffer[1]
+// Buffer should show directory entry first char (e.g. 'A'=0x41) or 0xEB for boot sector
+assign debug_root_cluster = {root_cluster[15:0], blk_buf[0], blk_buf[1]};
+// Row 5: Show sd_block (the actual LBA we're requesting from SD)
+assign debug_dir_lba = sd_block;
 
 //==============================================================================
 // Block buffer (512 bytes in BSRAM)
@@ -183,14 +222,29 @@ always @(posedge clk or negedge rst_n) begin
 
             //--------------------------------------------------------------
             // Generic block read: request block, fill buffer, return
+            // Note: sd_block must be set in the PREVIOUS state, then we
+            // wait one cycle here before asserting rd_start so sd_spi
+            // sees the correct block address when it latches on rd_start
             //--------------------------------------------------------------
             S_REQUEST_BLOCK: begin
-                sd_rd_start <= 1;
+                // sd_block was already set by the calling state
+                // Wait one cycle for sd_block register to update, then start
                 blk_wr_idx <= 0;
+                state <= S_START_READ;
+            end
+
+            S_START_READ: begin
+                // Now sd_block is stable, assert rd_start
+                sd_rd_start <= 1;
                 state <= S_WAIT_BLOCK;
             end
 
             S_WAIT_BLOCK: begin
+                // Keep rd_start high until SD starts responding
+                // (SD checks rd_start only every ~256 clocks at slow SPI rate)
+                if (blk_wr_idx == 0 && !sd_data_valid)
+                    sd_rd_start <= 1;
+
                 if (sd_data_valid)
                     blk_wr_idx <= blk_wr_idx + 1;
                 if (sd_rd_done) begin
@@ -271,16 +325,26 @@ always @(posedge clk or negedge rst_n) begin
                 sector_in_cluster <= 0;
                 dir_entry_idx <= 0;
 
+                // Wait one cycle for registers to settle before using them
+                state <= S_WAIT_REGS;
+            end
+
+            //--------------------------------------------------------------
+            // Wait for registers to settle (1 cycle delay)
+            //--------------------------------------------------------------
+            S_WAIT_REGS: begin
                 state <= S_READ_ROOTDIR;
             end
 
             //--------------------------------------------------------------
             // Read root directory sector
+            // For root cluster 2: LBA = data_start_lba (since (2-2)*spc = 0)
             //--------------------------------------------------------------
             S_READ_ROOTDIR: begin
-                // Calculate LBA for current sector in directory cluster
-                sd_block <= data_start_lba + ((dir_cluster - 32'd2) * {24'd0, sectors_per_cluster})
-                           + {24'd0, sector_in_cluster};
+                // Since root_cluster is typically 2, and (2-2)*spc = 0,
+                // the directory LBA is just data_start_lba for the first sector
+                // Use data_start_lba directly which should be 0x6000
+                sd_block <= data_start_lba;
                 return_state <= S_SCAN_DIR;
                 dir_entry_idx <= 0;
                 state <= S_REQUEST_BLOCK;
@@ -319,15 +383,19 @@ always @(posedge clk or negedge rst_n) begin
                     end else if (blk_buf[dir_entry_idx + 11] == 8'h0F) begin
                         // Long filename entry, skip
                         dir_entry_idx <= dir_entry_idx + 32;
+                    end else if (blk_buf[dir_entry_idx + 11][3]) begin
+                        // Volume label bit set (0x08), skip
+                        dir_entry_idx <= dir_entry_idx + 32;
                     end else if (blk_buf[dir_entry_idx + 11][4]) begin
-                        // Directory bit set, skip (it's a subdirectory)
+                        // Directory bit set (0x10), skip (it's a subdirectory)
                         dir_entry_idx <= dir_entry_idx + 32;
                     end else begin
                         // Check extension for "BMP" (8.3 format: name[0:7], ext[8:10])
                         // Extension is at offset 8,9,10 in the entry
-                        if ((blk_buf[dir_entry_idx + 8] == 8'h42) &&   // 'B'
-                            (blk_buf[dir_entry_idx + 9] == 8'h4D) &&   // 'M'
-                            (blk_buf[dir_entry_idx + 10] == 8'h50)) begin // 'P'
+                        // Case-insensitive: accept 'B'/'b', 'M'/'m', 'P'/'p'
+                        if (((blk_buf[dir_entry_idx + 8] == 8'h42) || (blk_buf[dir_entry_idx + 8] == 8'h62)) &&   // 'B' or 'b'
+                            ((blk_buf[dir_entry_idx + 9] == 8'h4D) || (blk_buf[dir_entry_idx + 9] == 8'h6D)) &&   // 'M' or 'm'
+                            ((blk_buf[dir_entry_idx + 10] == 8'h50) || (blk_buf[dir_entry_idx + 10] == 8'h70))) begin // 'P' or 'p'
                             // Found a .BMP file!
                             // Get starting cluster (high word at 20-21, low word at 26-27)
                             file_cluster <= {blk_buf[dir_entry_idx + 21],

@@ -1,0 +1,17 @@
+-d D:\CodeLab\Insight\impl\gwsynthesis\insight.vg
+-p GW2AR-18C-QFN88-8
+-pn GW2AR-LV18QN88C8/I7
+-cst D:\CodeLab\Insight\src\insight.cst
+-cfg D:\CodeLab\Insight\impl\pnr\device.cfg
+-bit
+-tr
+-ph
+-tt
+-timing
+-cst_error
+-place_option 0
+-route_option 0
+-clock_route_order 0
+-correct_hold 1
+-route_maxfan 23
+-global_freq 100.000
